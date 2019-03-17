@@ -21,4 +21,5 @@ func (s *SimpleStrategy) CaclWorkerNum(stats Stats) int {
 	case inBuffPerc <= 0.7:
 		return stats.MaxWorker - stats.CurrWorker
 	}
+	return 0
 }
