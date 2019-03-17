@@ -5,6 +5,7 @@ import (
 	"github.com/pkg/errors"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,8 +29,8 @@ type (
 		MaxWorker  int
 		BufferSize int
 		CurrWorker int
-		JobsIn     int
-		JobsDone   int
+		JobsIn     int64
+		JobsDone   int64
 	}
 
 	WorkerPool struct {
@@ -96,7 +97,7 @@ func (ewp *WorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 	}
 	if len(timeout) <= 0 {
 		ewp.jobChan <- jobFunc
-		ewp.stats.JobsIn++
+		atomic.AddInt64(&ewp.stats.JobsIn, 1)
 		ewp.log.Printf("ewp [%s]: enqueued", ewp.name)
 		return nil
 	}
