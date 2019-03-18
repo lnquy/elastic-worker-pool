@@ -1,6 +1,34 @@
 package elastic_worker_pool
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+func TestNewSensitiveController(t *testing.T) {
+	type args struct {
+		loadLevels LoadLevels
+	}
+	tests := []struct {
+		name string
+		args args
+		want LoadLevels
+	}{
+		{name: "1. nilLoadLevels", args: args{loadLevels: nil}, want: defaultLoadLevels},
+		{name: "2. defaultLoadLevels", args: args{loadLevels: defaultLoadLevels}, want: defaultLoadLevels},
+		{name: "3. customLoadLevel_sorted", args: args{loadLevels: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}}, want: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}},
+		{name: "4. customLoadLevel_unsorted", args: args{loadLevels: []LoadLevel{{1, 1}, {0.5, 0.5}, {0, 0}}}, want: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}},
+		{name: "5. customLoadLevel_unsorted", args: args{loadLevels: []LoadLevel{{1, 1}, {0.5, 0.5}, {0.1, 0.1}, {0.8, 0.8}, {0, 0}}}, want: []LoadLevel{{0, 0}, {0.1, 0.1}, {0.5, 0.5}, {0.8, 0.8}, {1, 1}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewSensitiveController(tt.args.loadLevels).(*sensitiveController)
+			if !reflect.DeepEqual(got.levels, tt.want) {
+				t.Errorf("NewSensitiveController() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func Test_sensitiveController_GetDesiredWorkerNum(t *testing.T) {
 	type fields struct {
