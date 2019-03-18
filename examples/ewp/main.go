@@ -11,7 +11,7 @@ import (
 func main() {
 	ewpConfig := elastic_worker_pool.Config{
 		MinWorker:           5,
-		MaxWorker:           10,
+		MaxWorker:           5,
 		PoolControlInterval: 2 * time.Second,
 	}
 	ewp, err := elastic_worker_pool.New(ewpConfig, nil, logrus.New())
@@ -27,7 +27,7 @@ func main() {
 			close(producerStopChan)
 		}()
 
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 100; i++ {
 			if isClose {
 				return
 			}
@@ -41,7 +41,7 @@ func main() {
 				time.Sleep(1 * time.Second)
 				logrus.Printf("jobFunc: do #%d", counter)
 			}
-			if err := ewp.Enqueue(jobFunc, 100*time.Millisecond); err != nil {
+			if err := ewp.Enqueue(jobFunc); err != nil {
 				logrus.Errorln("main: enqueue error:", err)
 			}
 		}

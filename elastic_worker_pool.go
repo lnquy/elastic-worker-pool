@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	defaultBufferSize              = 10
-	defaultShutdownTimeout         = 10 * time.Second
-	defaultPoolSizeControlInterval = 10 * time.Second
+	defaultBufferSize          = 10
+	defaultShutdownTimeout     = 10 * time.Second
+	defaultPoolControlInterval = 10 * time.Second
 )
 
 type (
@@ -92,11 +92,11 @@ func (ewp *WorkerPool) Start() {
 		for i := 0; i < ewp.conf.MinWorker; i++ {
 			ewp.wg.Add(1)
 			workerName := fmt.Sprintf("%s-%d", ewp.name, i)
-			worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.log, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone)
+			worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone, ewp.log)
 			go worker.do()
 		}
 		ewp.lastWorkerId = ewp.conf.MinWorker
-		ewp.log.Infof("ewp [%s]: started successfully\n", ewp.name)
+		ewp.log.Infof("ewp [%s]: worker pool started\n", ewp.name)
 	})
 }
 
@@ -126,7 +126,7 @@ func (ewp *WorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 	}
 }
 
-func (ewp *WorkerPool) GetStats() Statistics {
+func (ewp *WorkerPool) GetStatistics() Statistics {
 	return *ewp.stats
 }
 
@@ -166,7 +166,7 @@ func (ewp *WorkerPool) Close() {
 
 func (ewp *WorkerPool) controlPoolSize() {
 	if ewp.conf.MinWorker == ewp.conf.MaxWorker {
-		ewp.log.Infof("ewp [%s]: worker pool controller is not started as pool has fixed size (%d)\n", ewp.conf.MinWorker)
+		ewp.log.Infof("ewp [%s]: worker pool controller was not started as pool has fixed size (%d)\n", ewp.name, ewp.conf.MinWorker)
 		return
 	}
 
@@ -177,7 +177,7 @@ func (ewp *WorkerPool) controlPoolSize() {
 	for {
 		select {
 		case <-ticker.C:
-			stats := ewp.GetStats()
+			stats := ewp.GetStatistics()
 			desiredWorkerNum := ewp.controller.GetDesiredWorkerNum(stats)
 			diff := desiredWorkerNum - int(stats.CurrWorker)
 
@@ -200,7 +200,7 @@ func (ewp *WorkerPool) controlPoolSize() {
 				ewp.wg.Add(1)
 				ewp.lastWorkerId++
 				workerName := fmt.Sprintf("%s-%d", ewp.name, ewp.lastWorkerId)
-				worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.log, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone)
+				worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone, ewp.log)
 				go worker.do()
 			}
 
@@ -220,12 +220,11 @@ func (ewp *WorkerPool) onWorkerExited(workerName string) {
 	atomic.AddInt32(&ewp.stats.CurrWorker, -1)
 }
 
-func (ewp *WorkerPool) onWorkerJobDone() {
-	ewp.log.Debugf("ewp [%s]: job done", ewp.name)
+func (ewp *WorkerPool) onWorkerJobDone(workerName string) {
+	ewp.log.Debugf("ewp [%s]: job done on worker %s", ewp.name, workerName)
 	atomic.AddInt64(&ewp.stats.FinishedJobs, 1)
 }
 
-// TODO
 func validateConfig(ewpConfig *Config) error {
 	if ewpConfig.MinWorker <= 0 {
 		ewpConfig.MinWorker = runtime.NumCPU()
@@ -239,8 +238,8 @@ func validateConfig(ewpConfig *Config) error {
 	if ewpConfig.ShutdownTimeout == 0 {
 		ewpConfig.ShutdownTimeout = time.Duration(defaultShutdownTimeout)
 	}
-	if ewpConfig.PoolControlInterval <= 1 {
-		ewpConfig.PoolControlInterval = time.Duration(defaultPoolSizeControlInterval)
+	if ewpConfig.PoolControlInterval <= time.Second {
+		ewpConfig.PoolControlInterval = time.Duration(defaultPoolControlInterval)
 	}
 	return nil
 }

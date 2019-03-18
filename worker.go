@@ -12,17 +12,17 @@ type worker struct {
 
 	readyHook   func(workerName string)
 	exitHook    func(workerName string)
-	jobDoneHook func()
+	jobDoneHook func(workerName string)
 }
 
 func newWorker(name string,
 	wg *sync.WaitGroup,
 	jobChan <-chan func(),
 	poisonChan <-chan struct{},
-	logger Logger,
 	readyHook func(string),
 	exitHook func(string),
-	jobDoneHook func()) *worker {
+	jobDoneHook func(string),
+	logger Logger) *worker {
 
 	return &worker{
 		name:        name,
@@ -52,8 +52,9 @@ func (w *worker) do() {
 				w.log.Debugf("  > %s: jobChan closed. exit", w.name)
 				return
 			}
-			jobFunc() // Execute job
-			w.jobDoneHook()
+			// Execute job
+			jobFunc()
+			w.jobDoneHook(w.name)
 		case <-w.poisonChan:
 			w.log.Debugf("  > %s: poison pill received. exit", w.name)
 			return
