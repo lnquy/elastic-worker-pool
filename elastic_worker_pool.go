@@ -45,8 +45,8 @@ type (
 		wg           *sync.WaitGroup
 		startOnce    sync.Once
 		stopOnce     sync.Once
-		isStopped    bool
-		lastWorkerId int
+		isStopped    *AtomicBool
+		lastWorkerID int
 
 		controller PoolController
 		stats      *Statistics
@@ -73,6 +73,7 @@ func New(conf Config, controller PoolController, logger Logger) (*WorkerPool, er
 		workerPoisonChan: make(chan struct{}),
 		stopChan:         make(chan struct{}),
 		wg:               &sync.WaitGroup{},
+		isStopped:        &AtomicBool{},
 
 		controller: controller,
 		stats: &Statistics{
@@ -95,13 +96,13 @@ func (ewp *WorkerPool) Start() {
 			worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone, ewp.log)
 			go worker.do()
 		}
-		ewp.lastWorkerId = ewp.conf.MinWorker
+		ewp.lastWorkerID = ewp.conf.MinWorker
 		ewp.log.Infof("ewp [%s]: worker pool started\n", ewp.name)
 	})
 }
 
 func (ewp *WorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
-	if ewp.isStopped {
+	if ewp.isStopped.Get() {
 		return errors.New("worker pool stopped")
 	}
 
@@ -126,15 +127,22 @@ func (ewp *WorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 	}
 }
 
-func (ewp *WorkerPool) GetStatistics() Statistics {
-	return *ewp.stats
+func (ewp *WorkerPool) GetStatistics() *Statistics {
+	return &Statistics{
+		MinWorker:    ewp.stats.MinWorker,
+		MaxWorker:    ewp.stats.MaxWorker,
+		BufferLength: ewp.stats.BufferLength,
+		CurrWorker:   atomic.LoadInt32(&ewp.stats.CurrWorker),
+		EnqueuedJobs: atomic.LoadInt64(&ewp.stats.EnqueuedJobs),
+		FinishedJobs: atomic.LoadInt64(&ewp.stats.FinishedJobs),
+	}
 }
 
 func (ewp *WorkerPool) Close() {
 	ewp.stopOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: stopping worker pool\n", ewp.name)
 		start := time.Now()
-		ewp.isStopped = true
+		ewp.isStopped.Set(true)
 
 		shutdownChan := make(chan struct{})
 		go func() {
@@ -151,7 +159,7 @@ func (ewp *WorkerPool) Close() {
 			ewp.log.Debugf("ewp [%s]: closed jobChan", ewp.name)
 			// Wait until all workers closed gracefully.
 			ewp.wg.Wait()
-			ewp.log.Debugf("ewp [%s]: all workers exited", ewp.name)
+			ewp.log.Infof("ewp [%s]: all workers stopped", ewp.name)
 			close(ewp.workerPoisonChan)
 		}()
 
@@ -178,7 +186,7 @@ func (ewp *WorkerPool) controlPoolSize() {
 		select {
 		case <-ticker.C:
 			stats := ewp.GetStatistics()
-			desiredWorkerNum := ewp.controller.GetDesiredWorkerNum(stats)
+			desiredWorkerNum := ewp.controller.GetDesiredWorkerNum(*stats)
 			diff := desiredWorkerNum - int(stats.CurrWorker)
 
 			if diff == 0 {
@@ -198,8 +206,8 @@ func (ewp *WorkerPool) controlPoolSize() {
 			ewp.log.Infof("ewp [%s]: controller: expand worker pool: %d -> %d\n", ewp.name, stats.CurrWorker, desiredWorkerNum)
 			for i := 0; i < diff; i++ {
 				ewp.wg.Add(1)
-				ewp.lastWorkerId++
-				workerName := fmt.Sprintf("%s-%d", ewp.name, ewp.lastWorkerId)
+				ewp.lastWorkerID++
+				workerName := fmt.Sprintf("%s-%d", ewp.name, ewp.lastWorkerID)
 				worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone, ewp.log)
 				go worker.do()
 			}

@@ -1,8 +1,6 @@
 package elastic_worker_pool
 
-import (
-	"sort"
-)
+import "sort"
 
 type sensitiveController struct {
 	levels LoadLevels

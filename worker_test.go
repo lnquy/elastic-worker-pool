@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestWorker_Do(t *testing.T) {
+func Test_worker_Do(t *testing.T) {
 	var (
 		jobNum     = 30
 		poisonPill = 3
@@ -51,27 +51,27 @@ func TestWorker_Do(t *testing.T) {
 		worker := newWorker(strconv.Itoa(i), wg, jobChan, poisonChan, readyHook, exitHook, jobDoneHook, &discardLogger{})
 		go worker.do()
 	}
-	time.Sleep(2 * time.Second) // Wait for all workers to start up
-	if int(readyCounter) != expectedReady {
+	time.Sleep(time.Second) // Wait for all workers to start up
+	if int(atomic.LoadInt32(&readyCounter)) != expectedReady {
 		t.Fatalf("1. Expected all workers to start and call readyHook normally. Expected %d hooks, got %d hooks", expectedReady, readyCounter)
 	}
 
 	for i := 0; i < poisonPill; i++ {
 		poisonChan <- struct{}{}
 	}
-	time.Sleep(2 * time.Second) // Wait for all poisoned workers to exit
-	if int(exitCounter) != expectedExitAfterPoisoned {
+	time.Sleep(time.Second) // Wait for all poisoned workers to exit
+	if int(atomic.LoadInt32(&exitCounter)) != expectedExitAfterPoisoned {
 		t.Fatalf("2. Expected all poinsoned workers to stop and call exitHook normally. Expected %d hooks, got %d hooks", expectedExitAfterPoisoned, exitCounter)
 	}
 
 	close(jobChan) // Notify all workers to stop
 	wg.Wait()
 
-	if int(exitCounter) != expectedExit {
+	if int(atomic.LoadInt32(&exitCounter)) != expectedExit {
 		t.Fatalf("3. Expected all workers to stop and call exitHook normally. Expected %d hooks, got %d hooks", expectedExit, exitCounter)
 	}
 
-	if int(jobDoneCounter) != expectedJobDone {
+	if int(atomic.LoadInt32(&jobDoneCounter)) != expectedJobDone {
 		t.Fatalf("4. Expected all jobs must be executed before exited. Expected %d jobs done, got %d jobs done", expectedJobDone, jobDoneCounter)
 	}
 }

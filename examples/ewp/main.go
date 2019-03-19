@@ -11,8 +11,9 @@ import (
 func main() {
 	ewpConfig := elastic_worker_pool.Config{
 		MinWorker:           5,
-		MaxWorker:           5,
-		PoolControlInterval: 2 * time.Second,
+		MaxWorker:           20,
+		PoolControlInterval: 10 * time.Second,
+		BufferLength:        1000,
 	}
 	ewp, err := elastic_worker_pool.New(ewpConfig, nil, logrus.New())
 	if err != nil {
@@ -20,15 +21,15 @@ func main() {
 	}
 	ewp.Start()
 
-	var isClose bool
+	isClose := &elastic_worker_pool.AtomicBool{}
 	producerStopChan := make(chan struct{})
 	go func() {
 		defer func() {
 			close(producerStopChan)
 		}()
 
-		for i := 0; i < 100; i++ {
-			if isClose {
+		for i := 0; i < 10000000000; i++ {
+			if isClose.Get() {
 				return
 			}
 			// i will be reuse after each loop,
@@ -38,8 +39,9 @@ func main() {
 			// use it in jobFunc instead.
 			counter := i
 			jobFunc := func() {
-				time.Sleep(1 * time.Second)
-				logrus.Printf("jobFunc: do #%d", counter)
+				// time.Sleep(1 * time.Second)
+				// logrus.Printf("jobFunc: do #%d", counter)
+				counter++
 			}
 			if err := ewp.Enqueue(jobFunc); err != nil {
 				logrus.Errorln("main: enqueue error:", err)
@@ -52,7 +54,7 @@ func main() {
 	<-sigChan
 	logrus.Println("SIGINT received")
 	logrus.Infoln("main: closing producer")
-	isClose = true     // Notify producer to stop
+	isClose.Set(true)  // Notify producer to stop
 	<-producerStopChan // Wait until producer exited
 	logrus.Infoln("main: producer exited")
 
