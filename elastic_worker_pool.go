@@ -110,7 +110,7 @@ func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) 
 	if len(timeout) == 0 {
 		select {
 		case <-ewp.stopChan:
-			ewp.log.Debugf("ewp [%s]: enqueueStopChan closed. Abort sending job to queue", ewp.name)
+			ewp.log.Debugf("ewp [%s]: stopChan closed. Abort sending job to queue", ewp.name)
 		case ewp.jobChan <- jobFunc:
 			atomic.AddInt64(&ewp.stats.EnqueuedJobs, 1)
 			ewp.log.Debugf("ewp [%s]: job enqueued", ewp.name)
@@ -119,13 +119,15 @@ func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) 
 	}
 
 	select {
+	case <-ewp.stopChan:
+		ewp.log.Debugf("ewp [%s]: stopChan closed. Abort sending job to queue", ewp.name)
 	case ewp.jobChan <- jobFunc:
-		ewp.stats.EnqueuedJobs++
+		atomic.AddInt64(&ewp.stats.EnqueuedJobs, 1)
 		ewp.log.Debugf("ewp [%s]: job enqueued", ewp.name)
-		return nil
 	case <-time.After(timeout[0]):
 		return WorkerTimeoutExceededErr
 	}
+	return nil
 }
 
 func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
@@ -156,6 +158,9 @@ func (ewp *ElasticWorkerPool) Close() {
 			// Then notify workers that the input channel is closed.
 			// Workers must try to finish all remaining jobs in the jobChan before exited.
 			ewp.log.Debugf("ewp [%s]: closing jobChan", ewp.name)
+
+			// TODO: Race condition when job are waiting to be enqueued into jobChan,
+			//  but we close the channel immediately [?!]
 			close(ewp.jobChan)
 			ewp.log.Debugf("ewp [%s]: closed jobChan", ewp.name)
 			// Wait until all workers closed gracefully.
