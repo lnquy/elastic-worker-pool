@@ -1,27 +1,29 @@
 package main
 
 import (
-	"github.com/lnquy/elastic-worker-pool"
-	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/lnquy/elastic-worker-pool"
 )
 
 func main() {
-	ewpConfig := elastic_worker_pool.Config{
+	ewpConfig := ewp.Config{
 		MinWorker:           5,
 		MaxWorker:           20,
 		PoolControlInterval: 10 * time.Second,
 		BufferLength:        1000,
 	}
-	ewp, err := elastic_worker_pool.New(ewpConfig, nil, logrus.New())
+	myPool, err := ewp.New(ewpConfig, nil, logrus.New())
 	if err != nil {
 		logrus.Panicf("main: failed to create worker pool: %v", err)
 	}
-	ewp.Start()
+	myPool.Start()
 
-	isClose := &elastic_worker_pool.AtomicBool{}
+	isClose := &ewp.AtomicBool{}
 	producerStopChan := make(chan struct{})
 	go func() {
 		defer func() {
@@ -43,7 +45,7 @@ func main() {
 				// logrus.Printf("jobFunc: do #%d", counter)
 				counter++
 			}
-			if err := ewp.Enqueue(jobFunc); err != nil {
+			if err := myPool.Enqueue(jobFunc); err != nil {
 				logrus.Errorln("main: enqueue error:", err)
 			}
 		}
@@ -59,6 +61,6 @@ func main() {
 	logrus.Infoln("main: producer exited")
 
 	logrus.Infoln("main: closing worker pool")
-	ewp.Close()
+	myPool.Close()
 	logrus.Println("app exit")
 }

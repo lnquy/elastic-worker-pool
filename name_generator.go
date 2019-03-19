@@ -1,7 +1,7 @@
 // This file was taken from Docker project:
 // https://github.com/moby/moby/blob/e50f791d42d1167a5ef757b1aa179e84f0f81bba/pkg/namesgenerator/names-generator.go
 
-package elastic_worker_pool
+package ewp
 
 import (
 	"fmt"

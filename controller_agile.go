@@ -1,4 +1,4 @@
-package elastic_worker_pool
+package ewp
 
 import "sort"
 
@@ -23,10 +23,10 @@ func NewAgileController(loadLevels LoadLevels) PoolController {
 
 // E.g.: levels := []LoadLevel{ {0.1, 0.25}, {0.25, 0.5}, {0.5, 0.75}, {0.75, 1} }
 // ==> growthSpace = MaxWorker - MinWorker
-//     If loadPercentage < 0.1 => MinWorker
-//        loadPercentage >= 0.1 => MinWorker + 0.25*growthSpace
+//     If loadPercentage < 0.1   => MinWorker
+//        loadPercentage >= 0.1  => MinWorker + 0.25*growthSpace
 //        loadPercentage >= 0.25 => MinWorker + 0.5*growthSpace
-//        loadPercentage >= 0.5 => MinWorker + 0.75*growthSpace
+//        loadPercentage >= 0.5  => MinWorker + 0.75*growthSpace
 //        loadPercentage >= 0.75 => MinWorker + 1*growthSpace = MaxWorker
 func (s *agileController) GetDesiredWorkerNum(stats Statistics) int {
 	// Number of jobs currently in queue / total length of queue.

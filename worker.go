@@ -1,4 +1,4 @@
-package elastic_worker_pool
+package ewp
 
 import "sync"
 

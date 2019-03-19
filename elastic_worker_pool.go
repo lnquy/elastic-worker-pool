@@ -1,12 +1,13 @@
-package elastic_worker_pool
+package ewp
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -33,7 +34,7 @@ type (
 		FinishedJobs int64 `json:"finished_jobs"`
 	}
 
-	WorkerPool struct {
+	ElasticWorkerPool struct {
 		name string
 		conf Config
 		log  Logger
@@ -53,7 +54,7 @@ type (
 	}
 )
 
-func New(conf Config, controller PoolController, logger Logger) (*WorkerPool, error) {
+func New(conf Config, controller PoolController, logger Logger) (*ElasticWorkerPool, error) {
 	if err := validateConfig(&conf); err != nil {
 		return nil, errors.Wrapf(err, "invalid config")
 	}
@@ -64,7 +65,7 @@ func New(conf Config, controller PoolController, logger Logger) (*WorkerPool, er
 		logger = &discardLogger{}
 	}
 
-	return &WorkerPool{
+	return &ElasticWorkerPool{
 		name: getRandomName(0),
 		conf: conf,
 		log:  logger,
@@ -84,7 +85,7 @@ func New(conf Config, controller PoolController, logger Logger) (*WorkerPool, er
 	}, nil
 }
 
-func (ewp *WorkerPool) Start() {
+func (ewp *ElasticWorkerPool) Start() {
 	ewp.startOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: starting worker pool\n", ewp.name)
 		go ewp.controlPoolSize()
@@ -101,9 +102,9 @@ func (ewp *WorkerPool) Start() {
 	})
 }
 
-func (ewp *WorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
+func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 	if ewp.isStopped.Get() {
-		return errors.New("worker pool stopped")
+		return WorkerPoolStoppedErr
 	}
 
 	if len(timeout) == 0 {
@@ -123,11 +124,11 @@ func (ewp *WorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 		ewp.log.Debugf("ewp [%s]: job enqueued", ewp.name)
 		return nil
 	case <-time.After(timeout[0]):
-		return errors.New("all workers are busy, timeout exceeded")
+		return WorkerTimeoutExceededErr
 	}
 }
 
-func (ewp *WorkerPool) GetStatistics() *Statistics {
+func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
 	return &Statistics{
 		MinWorker:    ewp.stats.MinWorker,
 		MaxWorker:    ewp.stats.MaxWorker,
@@ -138,7 +139,7 @@ func (ewp *WorkerPool) GetStatistics() *Statistics {
 	}
 }
 
-func (ewp *WorkerPool) Close() {
+func (ewp *ElasticWorkerPool) Close() {
 	ewp.stopOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: stopping worker pool\n", ewp.name)
 		start := time.Now()
@@ -172,7 +173,7 @@ func (ewp *WorkerPool) Close() {
 	})
 }
 
-func (ewp *WorkerPool) controlPoolSize() {
+func (ewp *ElasticWorkerPool) controlPoolSize() {
 	if ewp.conf.MinWorker == ewp.conf.MaxWorker {
 		ewp.log.Infof("ewp [%s]: worker pool controller was not started as pool has fixed size (%d)\n", ewp.name, ewp.conf.MinWorker)
 		return
@@ -218,17 +219,17 @@ func (ewp *WorkerPool) controlPoolSize() {
 	}
 }
 
-func (ewp *WorkerPool) onWorkerReady(workerName string) {
+func (ewp *ElasticWorkerPool) onWorkerReady(workerName string) {
 	ewp.log.Debugf("ewp [%s]: worker %s started", ewp.name, workerName)
 	atomic.AddInt32(&ewp.stats.CurrWorker, 1)
 }
 
-func (ewp *WorkerPool) onWorkerExited(workerName string) {
+func (ewp *ElasticWorkerPool) onWorkerExited(workerName string) {
 	ewp.log.Debugf("ewp [%s]: worker %s exited", ewp.name, workerName)
 	atomic.AddInt32(&ewp.stats.CurrWorker, -1)
 }
 
-func (ewp *WorkerPool) onWorkerJobDone(workerName string) {
+func (ewp *ElasticWorkerPool) onWorkerJobDone(workerName string) {
 	ewp.log.Debugf("ewp [%s]: job done on worker %s", ewp.name, workerName)
 	atomic.AddInt64(&ewp.stats.FinishedJobs, 1)
 }
