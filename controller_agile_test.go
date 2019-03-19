@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestNewSensitiveController(t *testing.T) {
+func TestNewAgileController(t *testing.T) {
 	type args struct {
 		loadLevels LoadLevels
 	}
@@ -22,15 +22,15 @@ func TestNewSensitiveController(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewSensitiveController(tt.args.loadLevels).(*sensitiveController)
+			got := NewAgileController(tt.args.loadLevels).(*agileController)
 			if !reflect.DeepEqual(got.levels, tt.want) {
-				t.Errorf("NewSensitiveController() = %v, want %v", got, tt.want)
+				t.Errorf("NewAgileController() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_sensitiveController_GetDesiredWorkerNum(t *testing.T) {
+func Test_agileController_GetDesiredWorkerNum(t *testing.T) {
 	type fields struct {
 		levels LoadLevels
 	}
@@ -71,11 +71,11 @@ func Test_sensitiveController_GetDesiredWorkerNum(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &sensitiveController{
+			s := &agileController{
 				levels: tt.fields.levels,
 			}
 			if got := s.GetDesiredWorkerNum(tt.args.stats); got != tt.want {
-				t.Errorf("sensitiveController.GetDesiredWorkerNum() = %v, want %v", got, tt.want)
+				t.Errorf("agileController.GetDesiredWorkerNum() = %v, want %v", got, tt.want)
 			}
 		})
 	}

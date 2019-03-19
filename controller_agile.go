@@ -2,11 +2,13 @@ package elastic_worker_pool
 
 import "sort"
 
-type sensitiveController struct {
+var _ PoolController = &agileController{}
+
+type agileController struct {
 	levels LoadLevels
 }
 
-func NewSensitiveController(loadLevels LoadLevels) PoolController {
+func NewAgileController(loadLevels LoadLevels) PoolController {
 	if len(loadLevels) == 0 {
 		loadLevels = defaultLoadLevels
 	}
@@ -14,7 +16,7 @@ func NewSensitiveController(loadLevels LoadLevels) PoolController {
 		return loadLevels[i].LoadPct < loadLevels[j].LoadPct
 	})
 
-	return &sensitiveController{
+	return &agileController{
 		levels: loadLevels,
 	}
 }
@@ -26,7 +28,7 @@ func NewSensitiveController(loadLevels LoadLevels) PoolController {
 //        loadPercentage >= 0.25 => MinWorker + 0.5*growthSpace
 //        loadPercentage >= 0.5 => MinWorker + 0.75*growthSpace
 //        loadPercentage >= 0.75 => MinWorker + 1*growthSpace = MaxWorker
-func (s *sensitiveController) GetDesiredWorkerNum(stats Statistics) int {
+func (s *agileController) GetDesiredWorkerNum(stats Statistics) int {
 	// Number of jobs currently in queue / total length of queue.
 	loadPercentage := float64(stats.EnqueuedJobs-stats.FinishedJobs) / float64(stats.BufferLength)
 	growthSpace := stats.MaxWorker - stats.MinWorker

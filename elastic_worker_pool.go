@@ -58,7 +58,7 @@ func New(conf Config, controller PoolController, logger Logger) (*WorkerPool, er
 		return nil, errors.Wrapf(err, "invalid config")
 	}
 	if controller == nil {
-		controller = NewSensitiveController(nil)
+		controller = NewAgileController(nil)
 	}
 	if logger == nil {
 		logger = &discardLogger{}
