@@ -103,16 +103,18 @@ func TestElasticWorkerPool(t *testing.T) {
 
 	// Test graceful shutdown
 	<-prodStopChan
-	myPool.Close()
+	if err := myPool.Close(); err != nil {
+		t.Fatalf("10. Expected shutdown gracfully. Got: %v", err)
+	}
 	stats = myPool.GetStatistics()
 	if int(stats.CurrWorker) != 0 {
-		t.Fatalf("10. Expected pool closed all workers. Got: %d workers remained", stats.CurrWorker)
+		t.Fatalf("11. Expected pool closed all workers. Got: %d workers remained", stats.CurrWorker)
 	}
 	if int(stats.EnqueuedJobs) != expectedJobs {
-		t.Fatalf("11. Expected total %d jobs enqueued. Got: %d jobs", expectedJobs, stats.EnqueuedJobs)
+		t.Fatalf("12. Expected total %d jobs enqueued. Got: %d jobs", expectedJobs, stats.EnqueuedJobs)
 	}
 	if int(stats.FinishedJobs) != expectedJobs {
-		t.Fatalf("12. Expected total %d jobs finished. Got: %d jobs", expectedJobs, stats.FinishedJobs)
+		t.Fatalf("13. Expected total %d jobs finished. Got: %d jobs", expectedJobs, stats.FinishedJobs)
 	}
 }
 
@@ -153,12 +155,14 @@ func TestElasticWorkerPool_HighLoad(t *testing.T) {
 	}()
 
 	<-prodStopChan
-	myPool.Close()
+	if err := myPool.Close(); err != nil {
+		t.Fatalf("3. Expected shutdown gracefully. Got: %v", err)
+	}
 	stats := myPool.GetStatistics()
 	if int(stats.EnqueuedJobs) != jobNum {
-		t.Fatalf("3. Expected total %d jobs enqueued. Got: %d jobs", jobNum, stats.EnqueuedJobs)
+		t.Fatalf("4. Expected total %d jobs enqueued. Got: %d jobs", jobNum, stats.EnqueuedJobs)
 	}
 	if int(stats.FinishedJobs) != jobNum {
-		t.Fatalf("4. Expected total %d jobs finished. Got: %d jobs", jobNum, stats.FinishedJobs)
+		t.Fatalf("5. Expected total %d jobs finished. Got: %d jobs", jobNum, stats.FinishedJobs)
 	}
 }

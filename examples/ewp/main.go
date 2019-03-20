@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/signal"
+	"runtime"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -8,16 +11,15 @@ import (
 	"github.com/lnquy/elastic-worker-pool"
 )
 
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU() / 2)
+}
+
 func main() {
 	ewpConfig := ewp.Config{
-		// Minimum worker pool size.
 		MinWorker: 5,
-		// Maximum worker pool size.
 		MaxWorker: 20,
-		// Check and determine if it should expand/shrink pool size each 10 seconds.
 		PoolControlInterval: 10 * time.Second,
-		// The number of items can be pushed/enqueued without blocking
-		// (len of buffered channel).
 		BufferLength: 1000,
 	}
 
@@ -31,6 +33,7 @@ func main() {
 
 	// Producer pushes/enqueues jobs to pool.
 	// Pool's workers will execute the jobs later (async).
+	isStopped := &ewp.AtomicBool{}
 	prodStopChan := make(chan struct{})
 	jobNum := 100000000
 	go func() {
@@ -41,6 +44,9 @@ func main() {
 		}()
 
 		for i := 0; i < jobNum; i++ {
+			if isStopped.Get() {
+				return
+			}
 			// i will be reuse after each loop,
 			// while jobFunc will be executed later (async), so the value of i when
 			// jobFunc is being executed may not correct anymore.
@@ -61,7 +67,11 @@ func main() {
 		}
 	}()
 
-	time.Sleep(100*time.Millisecond) // Wait a little bit for producer to start up
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	<-sigChan
+	logrus.Infof("main: SIGINT received. Exiting")
+	isStopped.Set(true)
 
 	// *** IMPORTANT ***
 	// Race condition may happen if you comments these lines below.
@@ -70,12 +80,15 @@ func main() {
 	// Try to comment and uncomment these lines of code then run: go run -race main.go
 	// to test it yourself.
 	// *****************
+	logrus.Infoln("main: stop producer")
 	<-prodStopChan // Block until producer stopped
 	logrus.Infoln("main: producer exited")
 	// *****************
 
-	logrus.Infoln("main: closing worker pool")
+	logrus.Infoln("main: stop worker pool")
 	// Block until pool gracefully shutdown all its workers or exceed shutdown timeout.
-	myPool.Close()
-	logrus.Println("app exit")
+	if err := myPool.Close(); err != nil {
+		logrus.Errorf("main: shutdown err: %v", err)
+	}
+	logrus.Println("main: app exit")
 }

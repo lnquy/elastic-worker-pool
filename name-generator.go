@@ -8,9 +8,14 @@ package ewp
 import (
 	"fmt"
 	"math/rand"
+	"sync"
+	"time"
 )
 
 var (
+	mu     = &sync.RWMutex{}
+	random = rand.New(rand.NewSource(time.Now().Unix()))
+
 	left = [...]string{
 		"admiring",
 		"adoring",
@@ -830,14 +835,17 @@ var (
 // formatted as "adjective_surname". For example 'focused_turing'. If retry is non-zero, a random
 // integer between 0 and 10 will be added to the end of the name, e.g `focused_turing3`
 func getRandomName(retry int) string {
+	mu.Lock()
+	defer mu.Unlock()
+
 begin:
-	name := fmt.Sprintf("%s_%s", left[rand.Intn(len(left))], right[rand.Intn(len(right))])
+	name := fmt.Sprintf("%s_%s", left[random.Intn(len(left))], right[random.Intn(len(right))])
 	if name == "boring_wozniak" /* Steve Wozniak is not boring */ {
 		goto begin
 	}
 
 	if retry > 0 {
-		name = fmt.Sprintf("%s%d", name, rand.Intn(10))
+		name = fmt.Sprintf("%s%d", name, random.Intn(10))
 	}
 	return name
 }

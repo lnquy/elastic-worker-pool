@@ -133,6 +133,8 @@ func (ewp *ElasticWorkerPool) Name() string {
 
 // Start starts the EWP controller and all its workers.
 // Non-blocking, safe to (mistakenly) call multiple times.
+//
+// Start must be called before sending jobs to EWP (via Enqueue()).
 func (ewp *ElasticWorkerPool) Start() {
 	ewp.startOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: starting worker pool\n", ewp.name)
@@ -202,7 +204,7 @@ func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
 	}
 }
 
-// Close gracefully stops the EWP controller and all its workers
+// Close gracefully stops the EWP controller and all its workers.
 // Blocking at max ShutdownTimeout, safe to (mistakenly) call multiple times.
 //
 // Close graceful shutdown logic:
@@ -213,10 +215,12 @@ func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
 //      or ShutdownTimeout exceeded:
 //       + Workers will continue to process any enqueued jobs in jobChan.
 //         When all jobs has been processed, then workers stop gracefully.
-//       + If ShutdownTimeout exceeded before all workers returned, close returns immediately.
+//       + If ShutdownTimeout exceeded before all workers returned,
+//         close returns immediately with exceed timeout error.
 //
 //
-// ***** IMPORTANT *****
+// *** IMPORTANT ***
+//
 // Race condition can happen on this method if producer(s) still running and trying to
 // push jobs to ewp via Enqueue().
 //
@@ -227,8 +231,7 @@ func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
 //
 // See the examples/ewp/main.go for the example of possible race condition.
 // Or take a look on code comments of this method for more detail.
-// *********************
-func (ewp *ElasticWorkerPool) Close() {
+func (ewp *ElasticWorkerPool) Close() (err error) {
 	ewp.stopOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: stopping worker pool\n", ewp.name)
 		start := time.Now()
@@ -284,8 +287,11 @@ func (ewp *ElasticWorkerPool) Close() {
 			ewp.log.Infof("ewp [%s]: worker pool shutdown gracefully in %v\n", ewp.name, time.Since(start))
 		case <-time.After(ewp.conf.ShutdownTimeout): // Force shutdown after timeout
 			ewp.log.Infof("ewp [%s]: worker pool exceeded shutdown timeout. Force quit\n", ewp.name)
+			err = ShutdownTimeoutExceededErr
 		}
 	})
+
+	return err
 }
 
 // controlPoolSize intervally grabs the EWP statistics then determines the reaction

@@ -13,7 +13,7 @@ type rigidController struct {
 
 func NewRigidController(loadLevels LoadLevels, maxChangesPerCycle int) (PoolController, error) {
 	if maxChangesPerCycle < 0 {
-		return nil, RigidControllerInvalidConfigErr
+		return nil, RigidCtlrInvalidConfigErr
 	}
 
 	if len(loadLevels) == 0 {
