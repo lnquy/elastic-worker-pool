@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU() / 2)
+}
+
 func TestElasticWorkerPool(t *testing.T) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -32,30 +36,34 @@ func TestElasticWorkerPool(t *testing.T) {
 
 	// Test worker pool start up
 	myPool.Start()
-	time.Sleep(time.Second) // Wait for all workers to start up
+	time.Sleep(500 * time.Millisecond) // Wait for all workers to start up
 	stats := myPool.GetStatistics()
 	if int(stats.CurrWorker) != expectedMinWorker {
 		t.Fatalf("2. Expected pool started %d workers. Got %d workers", expectedMinWorker, stats.CurrWorker)
 	}
 
+	prodStopChan := make(chan struct{})
 	// Test job enqueuing
 	go func() {
+		defer close(prodStopChan)
+
 		for i := 0; i < bufferLength*2; i++ {
 			slowJobFunc := func() {
 				time.Sleep(2 * time.Second)
 			}
-			if err := myPool.Enqueue(slowJobFunc, 100*time.Millisecond); err != nil {
+			if err := myPool.Enqueue(slowJobFunc, 50*time.Millisecond); err != nil {
 				t.Fatalf("3. Expected slowJobs enqueued success. Got: %v", err)
 			}
 		}
 
-		if err := myPool.Enqueue(func() {}, 50*time.Microsecond); err != WorkerTimeoutExceededErr {
+		if err := myPool.Enqueue(func() {}, 10*time.Millisecond); err != WorkerTimeoutExceededErr {
 			t.Fatalf("4. Expected enqueue failed due to timeout, got: %v", err)
 		}
 	}()
+	<-prodStopChan
 
 	expectedJobs := bufferLength * 2
-	time.Sleep(6 * time.Second) // Wait for all published jobs to be executed
+	time.Sleep(5 * time.Second) // Wait for all published jobs to be executed
 	stats = myPool.GetStatistics()
 	if int(stats.EnqueuedJobs) != expectedJobs {
 		t.Fatalf("5. Expected %d jobs enqueued, got: %d", expectedJobs, stats.EnqueuedJobs)
@@ -65,7 +73,10 @@ func TestElasticWorkerPool(t *testing.T) {
 	}
 
 	// Test worker pool expanding
+	prodStopChan = make(chan struct{})
 	go func() {
+		defer close(prodStopChan)
+
 		for i := 0; i < bufferLength*3; i++ {
 			slowJobFunc := func() {
 				time.Sleep(2 * time.Second)
@@ -84,13 +95,14 @@ func TestElasticWorkerPool(t *testing.T) {
 	}
 
 	// Test worker pool shrinking
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	stats = myPool.GetStatistics()
 	if int(stats.CurrWorker) != expectedMinWorker {
 		t.Fatalf("9. Expected pool to shrink to %d workers. Got: %d workers", expectedMinWorker, stats.CurrWorker)
 	}
 
 	// Test graceful shutdown
+	<-prodStopChan
 	myPool.Close()
 	stats = myPool.GetStatistics()
 	if int(stats.CurrWorker) != 0 {
@@ -111,7 +123,7 @@ func TestElasticWorkerPool_HighLoad(t *testing.T) {
 		}
 	}()
 
-	jobNum := 10000000
+	jobNum := 500000
 
 	ewpConfig := Config{
 		MinWorker:           runtime.NumCPU(),

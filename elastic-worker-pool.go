@@ -85,6 +85,10 @@ func New(conf Config, controller PoolController, logger Logger) (*ElasticWorkerP
 	}, nil
 }
 
+func (ewp *ElasticWorkerPool) Name() string {
+	return ewp.name
+}
+
 func (ewp *ElasticWorkerPool) Start() {
 	ewp.startOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: starting worker pool\n", ewp.name)
@@ -107,6 +111,8 @@ func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) 
 		return WorkerPoolStoppedErr
 	}
 
+	// ewp.mu.Lock()
+	// defer ewp.mu.Unlock()
 	if len(timeout) == 0 {
 		select {
 		case <-ewp.stopChan:
@@ -157,12 +163,34 @@ func (ewp *ElasticWorkerPool) Close() {
 			ewp.log.Debugf("ewp [%s]: closed stopChan", ewp.name)
 			// Then notify workers that the input channel is closed.
 			// Workers must try to finish all remaining jobs in the jobChan before exited.
-			ewp.log.Debugf("ewp [%s]: closing jobChan", ewp.name)
 
-			// TODO: Race condition when job are waiting to be enqueued into jobChan,
-			//  but we close the channel immediately [?!]
+			// *** IMPORTANT ***
+			// Race condition can exist here if producer(s) still running and trying to
+			// push jobs to ewp via Enqueue().
+			//
+			// Explanation: The operation of sending job to channel is not
+			// an atomic operation.
+			// So there's a case when job is sending (not blocking/waiting but actually
+			// doing the send operation) to the channel, and we closes the channel
+			// at the same time, that cause race condition.
+			//
+			// Solution: We can use sync.Mutex to guard the jobChan whenever we're sending
+			// jobs to that channel.
+			// But it will slowdown the whole worker pool, as every Enqueue() call now will
+			// have to wait for each others to acquire the mutex lock.
+			// That's what I don't want to.
+			//
+			// ==> So EWP only guarantee graceful shutdown for its workers.
+			// It is user's responsibility to safely stop all producer(s) first,
+			// before stopping the worker pool.
+			// Otherwise, race condition may happen!
+			//
+			// See the examples/ewp/main.go for the example of possible race condition.
+			// *****************
+			ewp.log.Debugf("ewp [%s]: closing jobChan", ewp.name)
 			close(ewp.jobChan)
 			ewp.log.Debugf("ewp [%s]: closed jobChan", ewp.name)
+
 			// Wait until all workers closed gracefully.
 			ewp.wg.Wait()
 			ewp.log.Infof("ewp [%s]: all workers stopped", ewp.name)

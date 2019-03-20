@@ -1,5 +1,7 @@
-// This file was taken from Docker project:
-// https://github.com/moby/moby/blob/e50f791d42d1167a5ef757b1aa179e84f0f81bba/pkg/namesgenerator/names-generator.go
+// This file was originally taken from Docker project:
+// https://github.com/moby/moby/blob/e50f791d42/pkg/namesgenerator/names-generator.go
+//
+// Apache License 2.0: https://github.com/moby/moby/blob/e50f791d42/LICENSE
 
 package ewp
 
