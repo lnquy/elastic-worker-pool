@@ -11,49 +11,83 @@ import (
 )
 
 const (
-	defaultBufferSize          = 10
+	defaultBufferLength        = 10
 	defaultShutdownTimeout     = 10 * time.Second
 	defaultPoolControlInterval = 10 * time.Second
 )
 
 type (
+	// Config defines all EWP configurations.
 	Config struct {
-		MinWorker           int           `json:"min_worker"`
-		MaxWorker           int           `json:"max_worker"`
-		BufferLength        int           `json:"buffer_length"`
-		ShutdownTimeout     time.Duration `json:"shutdown_timeout"`
+		// Minimum number of workers in worker pool.
+		// EWP controller may shrink the pool size to this value at free time.
+		MinWorker int `json:"min_worker"`
+
+		// Maximum number of workers allowed in worker pool.
+		// EWP controller may expand the pool size to this value at high load.
+		MaxWorker int `json:"max_worker"`
+
+		// The number of jobs allowed to be enqueued to EWP without blocking.
+		// If the number of jobs in queue reaches this value, all other enqueuing jobs
+		// will be blocked until an already enqueued job be processed.
+		BufferLength int `json:"buffer_length"`
+
+		// Time to wait for EWP to finish all remaining jobs (graceful shutdown)
+		// before terminating it.
+		ShutdownTimeout time.Duration `json:"shutdown_timeout"`
+
+		// Interval duration for pool controller to run.
 		PoolControlInterval time.Duration `json:"pool_control_interval"`
 	}
 
+	// Statistics holds the EWP internal information.
 	Statistics struct {
-		MinWorker    int   `json:"min_worker"`
-		MaxWorker    int   `json:"max_worker"`
-		BufferLength int   `json:"buffer_length"`
-		CurrWorker   int32 `json:"curr_worker"`
+		MinWorker    int `json:"min_worker"`
+		MaxWorker    int `json:"max_worker"`
+		BufferLength int `json:"buffer_length"`
+
+		// Number of workers currently running in EWP.
+		CurrWorker int32 `json:"curr_worker"`
+		// Total number of jobs has been enqueued into the EWP.
 		EnqueuedJobs int64 `json:"enqueued_jobs"`
+		// Total number of jobs has been processed by the EWP workers.
 		FinishedJobs int64 `json:"finished_jobs"`
 	}
 
+	// ElasticWorkerPool represents the worker pool that can
+	// automatically expand/shrink its size.
 	ElasticWorkerPool struct {
-		name string
+		name string // Human-readable name
 		conf Config
 		log  Logger
 
-		jobChan          chan func()
+		// All jobs enqueued to EWP will be pushed to this buffered channel.
+		// EWP also distributes jobs to its workers via this channel.
+		jobChan chan func()
+
+		// Channel to allow EWP controller to kill the workers.
 		workerPoisonChan chan struct{}
-		stopChan         chan struct{}
+
+		// Channel to notify all waiting/background operations to stop.
+		stopChan chan struct{}
 
 		wg           *sync.WaitGroup
 		startOnce    sync.Once
 		stopOnce     sync.Once
-		isStopped    *AtomicBool
-		lastWorkerID int
+		isStopped    *AtomicBool // Current running state of EWP
+		lastWorkerID int         // The ID of last started worker
 
+		// Controller will decide how it should react (expand/shrink pool size)
+		// with the current workload level of the EWP.
 		controller PoolController
-		stats      *Statistics
+
+		// Store the internal statistics of EWP for monitoring.
+		stats *Statistics
 	}
 )
 
+// New returns an Elastic Worker Pool (EWP) with provided configurations.
+// Should use NewDefault if you want to create an EWP with default configurations instead.
 func New(conf Config, controller PoolController, logger Logger) (*ElasticWorkerPool, error) {
 	if err := validateConfig(&conf); err != nil {
 		return nil, errors.Wrapf(err, "invalid config")
@@ -85,15 +119,26 @@ func New(conf Config, controller PoolController, logger Logger) (*ElasticWorkerP
 	}, nil
 }
 
+// NewDefault creates an EWP with default configurations.
+// The AgileController with default load factor levels will be used as the pool controller.
+// All EWP logs will be discarded.
+func NewDefault() (*ElasticWorkerPool, error) {
+	return New(Config{}, nil, nil)
+}
+
+// Name returns the human-readable name of current EWP.
 func (ewp *ElasticWorkerPool) Name() string {
 	return ewp.name
 }
 
+// Start starts the EWP controller and all its workers.
+// Non-blocking, safe to (mistakenly) call multiple times.
 func (ewp *ElasticWorkerPool) Start() {
 	ewp.startOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: starting worker pool\n", ewp.name)
-		go ewp.controlPoolSize()
+		go ewp.controlPoolSize() // Controller
 
+		// Workers
 		ewp.log.Infof("ewp [%s]: starting %d workers\n", ewp.name, ewp.conf.MinWorker)
 		for i := 0; i < ewp.conf.MinWorker; i++ {
 			ewp.wg.Add(1)
@@ -106,13 +151,21 @@ func (ewp *ElasticWorkerPool) Start() {
 	})
 }
 
+// Enqueue pushes the job to EWP queue, job will be processed later in time (async)
+// by EWP workers.
+// Safe to call concurrently.
+//
+// If the EWP buffer still have available slot(s) for new job to be enqueued (BufferLength config) then this method is non-blocking.
+//
+// In case the EWP buffer is already full, then this method is blocked.
+// The blocking time is non-deterministic so caller can provide an optional timeout duration.
+// A timeout exceed error will be returned if this method failed to enqueue job during
+// the timeout duration.
 func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 	if ewp.isStopped.Get() {
 		return WorkerPoolStoppedErr
 	}
 
-	// ewp.mu.Lock()
-	// defer ewp.mu.Unlock()
 	if len(timeout) == 0 {
 		select {
 		case <-ewp.stopChan:
@@ -136,6 +189,8 @@ func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) 
 	return nil
 }
 
+// GetStatistics returns the internal statistics of the EWP.
+// Non-blocking, safe to call concurrently.
 func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
 	return &Statistics{
 		MinWorker:    ewp.stats.MinWorker,
@@ -147,6 +202,32 @@ func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
 	}
 }
 
+// Close gracefully stops the EWP controller and all its workers
+// Blocking at max ShutdownTimeout, safe to (mistakenly) call multiple times.
+//
+// Close graceful shutdown logic:
+//    - Mark the EWP as stopped, won't accept more jobs to be enqueued.
+//    - Close stopChan to notify controller to stop. Also abort any jobs waiting
+//      to be enqueued to jobChan.
+//    - Close jobChan to notify workers to stop and wait until all workers stopped gracefully
+//      or ShutdownTimeout exceeded:
+//       + Workers will continue to process any enqueued jobs in jobChan.
+//         When all jobs has been processed, then workers stop gracefully.
+//       + If ShutdownTimeout exceeded before all workers returned, close returns immediately.
+//
+//
+// ***** IMPORTANT *****
+// Race condition can happen on this method if producer(s) still running and trying to
+// push jobs to ewp via Enqueue().
+//
+// ==> EWP only guarantee graceful shutdown for its workers.
+// It is caller's responsibility to safely stop all producer(s) first, before stopping
+// the EWP.
+// Otherwise, race condition may happen!
+//
+// See the examples/ewp/main.go for the example of possible race condition.
+// Or take a look on code comments of this method for more detail.
+// *********************
 func (ewp *ElasticWorkerPool) Close() {
 	ewp.stopOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: stopping worker pool\n", ewp.name)
@@ -181,7 +262,7 @@ func (ewp *ElasticWorkerPool) Close() {
 			// That's what I don't want to.
 			//
 			// ==> So EWP only guarantee graceful shutdown for its workers.
-			// It is user's responsibility to safely stop all producer(s) first,
+			// It is caller's responsibility to safely stop all producer(s) first,
 			// before stopping the worker pool.
 			// Otherwise, race condition may happen!
 			//
@@ -190,6 +271,7 @@ func (ewp *ElasticWorkerPool) Close() {
 			ewp.log.Debugf("ewp [%s]: closing jobChan", ewp.name)
 			close(ewp.jobChan)
 			ewp.log.Debugf("ewp [%s]: closed jobChan", ewp.name)
+			// *****************
 
 			// Wait until all workers closed gracefully.
 			ewp.wg.Wait()
@@ -206,6 +288,9 @@ func (ewp *ElasticWorkerPool) Close() {
 	})
 }
 
+// controlPoolSize intervally grabs the EWP statistics then determines the reaction
+// should be made (expand/shrink pool size) based on current statistics.
+// Each pool controller has its own way of dealing with the same workload level.
 func (ewp *ElasticWorkerPool) controlPoolSize() {
 	if ewp.conf.MinWorker == ewp.conf.MaxWorker {
 		ewp.log.Infof("ewp [%s]: worker pool controller was not started as pool has fixed size (%d)\n", ewp.name, ewp.conf.MinWorker)
@@ -228,7 +313,8 @@ func (ewp *ElasticWorkerPool) controlPoolSize() {
 				continue
 			}
 
-			if diff < 0 { // Shrink
+			// Shrink
+			if diff < 0 {
 				ewp.log.Infof("ewp [%s]: controller: shrink worker pool: %d -> %d\n", ewp.name, stats.CurrWorker, desiredWorkerNum)
 				for i := 0; i > diff; i-- {
 					ewp.workerPoisonChan <- struct{}{}
@@ -252,21 +338,29 @@ func (ewp *ElasticWorkerPool) controlPoolSize() {
 	}
 }
 
+// onWorkerReady is a hook for workers to callback whenever a new worker started up
+// and ready to serve works.
+// Must be non-blocking and safe to call concurrently.
 func (ewp *ElasticWorkerPool) onWorkerReady(workerName string) {
 	ewp.log.Debugf("ewp [%s]: worker %s started", ewp.name, workerName)
 	atomic.AddInt32(&ewp.stats.CurrWorker, 1)
 }
 
+// onWorkerExited is a hook for workers to callback whenever a worker stopped gracefully.
+// Must be non-blocking and safe to call concurrently.
 func (ewp *ElasticWorkerPool) onWorkerExited(workerName string) {
 	ewp.log.Debugf("ewp [%s]: worker %s exited", ewp.name, workerName)
 	atomic.AddInt32(&ewp.stats.CurrWorker, -1)
 }
 
+// onWorkerJobDone is a hook for workers to callback whenever a job has been processed.
+// Must be non-blocking and safe to call concurrently.
 func (ewp *ElasticWorkerPool) onWorkerJobDone(workerName string) {
 	ewp.log.Debugf("ewp [%s]: job done on worker %s", ewp.name, workerName)
 	atomic.AddInt64(&ewp.stats.FinishedJobs, 1)
 }
 
+// validateConfig tries to set invalid configurations to default values.
 func validateConfig(ewpConfig *Config) error {
 	if ewpConfig.MinWorker <= 0 {
 		ewpConfig.MinWorker = runtime.NumCPU()
@@ -275,7 +369,7 @@ func validateConfig(ewpConfig *Config) error {
 		ewpConfig.MaxWorker = ewpConfig.MinWorker
 	}
 	if ewpConfig.BufferLength < 1 {
-		ewpConfig.BufferLength = defaultBufferSize
+		ewpConfig.BufferLength = defaultBufferLength
 	}
 	if ewpConfig.ShutdownTimeout == 0 {
 		ewpConfig.ShutdownTimeout = time.Duration(defaultShutdownTimeout)
