@@ -35,8 +35,8 @@ func (s *agileController) GetDesiredWorkerNum(stats Statistics) int {
 
 	for i := len(s.levels) - 1; i >= 0; i-- {
 		if loadPercentage >= s.levels[i].LoadPct {
-			return stats.MinWorker + int(s.levels[i].GrowthPct*float64(growthSpace))
+			return int(stats.MinWorker) + int(s.levels[i].GrowthPct*float64(growthSpace))
 		}
 	}
-	return stats.MinWorker
+	return int(stats.MinWorker)
 }

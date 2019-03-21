@@ -21,16 +21,16 @@ type (
 	Config struct {
 		// Minimum number of workers in worker pool.
 		// EWP controller may shrink the pool size to this value at free time.
-		MinWorker int `json:"min_worker"`
+		MinWorker int32 `json:"min_worker"`
 
 		// Maximum number of workers allowed in worker pool.
 		// EWP controller may expand the pool size to this value at high load.
-		MaxWorker int `json:"max_worker"`
+		MaxWorker int32 `json:"max_worker"`
 
 		// The number of jobs allowed to be enqueued to EWP without blocking.
 		// If the number of jobs in queue reaches this value, all other enqueuing jobs
 		// will be blocked until an already enqueued job be processed.
-		BufferLength int `json:"buffer_length"`
+		BufferLength int32 `json:"buffer_length"`
 
 		// Time to wait for EWP to finish all remaining jobs (graceful shutdown)
 		// before terminating it.
@@ -42,9 +42,9 @@ type (
 
 	// Statistics holds the EWP internal information.
 	Statistics struct {
-		MinWorker    int `json:"min_worker"`
-		MaxWorker    int `json:"max_worker"`
-		BufferLength int `json:"buffer_length"`
+		MinWorker    int32 `json:"min_worker"`
+		MaxWorker    int32 `json:"max_worker"`
+		BufferLength int32 `json:"buffer_length"`
 
 		// Number of workers currently running in EWP.
 		CurrWorker int32 `json:"curr_worker"`
@@ -142,13 +142,13 @@ func (ewp *ElasticWorkerPool) Start() {
 
 		// Workers
 		ewp.log.Infof("ewp [%s]: starting %d workers\n", ewp.name, ewp.conf.MinWorker)
-		for i := 0; i < ewp.conf.MinWorker; i++ {
+		for i := int32(0); i < ewp.conf.MinWorker; i++ {
 			ewp.wg.Add(1)
 			workerName := fmt.Sprintf("%s-%d", ewp.name, i)
 			worker := newWorker(workerName, ewp.wg, ewp.jobChan, ewp.workerPoisonChan, ewp.onWorkerReady, ewp.onWorkerExited, ewp.onWorkerJobDone, ewp.log)
 			go worker.do()
 		}
-		ewp.lastWorkerID = ewp.conf.MinWorker
+		ewp.lastWorkerID = int(ewp.conf.MinWorker)
 		ewp.log.Infof("ewp [%s]: worker pool started\n", ewp.name)
 	})
 }
@@ -189,19 +189,6 @@ func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) 
 		return WorkerTimeoutExceededErr
 	}
 	return nil
-}
-
-// GetStatistics returns the internal statistics of the EWP.
-// Non-blocking, safe to call concurrently.
-func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
-	return &Statistics{
-		MinWorker:    ewp.stats.MinWorker,
-		MaxWorker:    ewp.stats.MaxWorker,
-		BufferLength: ewp.stats.BufferLength,
-		CurrWorker:   atomic.LoadInt32(&ewp.stats.CurrWorker),
-		EnqueuedJobs: atomic.LoadInt64(&ewp.stats.EnqueuedJobs),
-		FinishedJobs: atomic.LoadInt64(&ewp.stats.FinishedJobs),
-	}
 }
 
 // Close gracefully stops the EWP controller and all its workers.
@@ -294,14 +281,27 @@ func (ewp *ElasticWorkerPool) Close() (err error) {
 	return err
 }
 
+// GetStatistics returns the internal statistics of the EWP.
+// Non-blocking, safe to call concurrently.
+func (ewp *ElasticWorkerPool) GetStatistics() *Statistics {
+	return &Statistics{
+		MinWorker:    atomic.LoadInt32(&ewp.stats.MinWorker),
+		MaxWorker:    atomic.LoadInt32(&ewp.stats.MaxWorker),
+		BufferLength: ewp.stats.BufferLength,
+		CurrWorker:   atomic.LoadInt32(&ewp.stats.CurrWorker),
+		EnqueuedJobs: atomic.LoadInt64(&ewp.stats.EnqueuedJobs),
+		FinishedJobs: atomic.LoadInt64(&ewp.stats.FinishedJobs),
+	}
+}
+
 // controlPoolSize intervally grabs the EWP statistics then determines the reaction
 // should be made (expand/shrink pool size) based on current statistics.
 // Each pool controller has its own way of dealing with the same workload level.
 func (ewp *ElasticWorkerPool) controlPoolSize() {
-	if ewp.conf.MinWorker == ewp.conf.MaxWorker {
-		ewp.log.Infof("ewp [%s]: worker pool controller was not started as pool has fixed size (%d)\n", ewp.name, ewp.conf.MinWorker)
-		return
-	}
+	// if ewp.conf.MinWorker == ewp.conf.MaxWorker {
+	// 	ewp.log.Infof("ewp [%s]: worker pool controller was not started as pool has fixed size (%d)\n", ewp.name, ewp.conf.MinWorker)
+	// 	return
+	// }
 
 	defer ewp.log.Infof("ewp [%s]: worker pool controller stopped", ewp.name)
 	ticker := time.NewTicker(ewp.conf.PoolControlInterval)
@@ -311,6 +311,10 @@ func (ewp *ElasticWorkerPool) controlPoolSize() {
 		select {
 		case <-ticker.C:
 			stats := ewp.GetStatistics()
+			// Skip checking if buffer length too small or pool size is fixed
+			if stats.BufferLength <= 1 || stats.MinWorker == stats.MaxWorker {
+				continue
+			}
 			desiredWorkerNum := ewp.controller.GetDesiredWorkerNum(*stats)
 			diff := desiredWorkerNum - int(stats.CurrWorker)
 
@@ -344,6 +348,30 @@ func (ewp *ElasticWorkerPool) controlPoolSize() {
 	}
 }
 
+// SetMinWorker allows to update the minimum number of workers in worker pool.
+// If the input number is bigger than current maximum number of workers then no change
+// will be applied.
+func (ewp *ElasticWorkerPool) SetMinWorker(workerNum int32) {
+	max := atomic.LoadInt32(&ewp.stats.MaxWorker)
+	if workerNum == 0 || workerNum > max {
+		return
+	}
+	atomic.StoreInt32(&ewp.stats.MinWorker, workerNum)
+	atomic.StoreInt32(&ewp.conf.MinWorker, workerNum)
+}
+
+// SetMaxWorker allows to update the maximum number of workers in worker pool.
+// If the input number is smaller than current minimum number of workers then no change
+// will be applied.
+func (ewp *ElasticWorkerPool) SetMaxWorker(workerNum int32) {
+	min := atomic.LoadInt32(&ewp.stats.MinWorker)
+	if workerNum == 0 || workerNum < min {
+		return
+	}
+	atomic.StoreInt32(&ewp.stats.MaxWorker, workerNum)
+	atomic.StoreInt32(&ewp.conf.MaxWorker, workerNum)
+}
+
 // onWorkerReady is a hook for workers to callback whenever a new worker started up
 // and ready to serve works.
 // Must be non-blocking and safe to call concurrently.
@@ -369,7 +397,7 @@ func (ewp *ElasticWorkerPool) onWorkerJobDone(workerName string) {
 // validateConfig tries to set invalid configurations to default values.
 func validateConfig(ewpConfig *Config) error {
 	if ewpConfig.MinWorker <= 0 {
-		ewpConfig.MinWorker = runtime.NumCPU()
+		ewpConfig.MinWorker = int32(runtime.NumCPU())
 	}
 	if ewpConfig.MaxWorker < ewpConfig.MinWorker {
 		ewpConfig.MaxWorker = ewpConfig.MinWorker

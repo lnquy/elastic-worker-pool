@@ -46,11 +46,11 @@ func (s *rigidController) GetDesiredWorkerNum(stats Statistics) int {
 
 	for i := len(s.levels) - 1; i >= 0; i-- {
 		if loadPercentage >= s.levels[i].LoadPct {
-			desiredWorkerNum := stats.MinWorker + int(s.levels[i].GrowthPct*float64(growthSpace))
+			desiredWorkerNum := int(stats.MinWorker) + int(s.levels[i].GrowthPct*float64(growthSpace))
 			return s.limitToMaxChangesPerCycle(desiredWorkerNum, int(stats.CurrWorker))
 		}
 	}
-	return s.limitToMaxChangesPerCycle(stats.MinWorker, int(stats.CurrWorker))
+	return s.limitToMaxChangesPerCycle(int(stats.MinWorker), int(stats.CurrWorker))
 }
 
 func (s *rigidController) limitToMaxChangesPerCycle(desiredWorkerNum, currentWorkerNum int) int {
