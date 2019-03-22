@@ -10,20 +10,29 @@ func TestNewAgileController(t *testing.T) {
 		loadLevels LoadLevels
 	}
 	tests := []struct {
-		name string
-		args args
-		want LoadLevels
+		name    string
+		args    args
+		want    PoolController
+		wantErr bool
 	}{
-		{name: "1. nilLoadLevels", args: args{loadLevels: nil}, want: defaultLoadLevels},
-		{name: "2. defaultLoadLevels", args: args{loadLevels: defaultLoadLevels}, want: defaultLoadLevels},
-		{name: "3. customLoadLevel_sorted", args: args{loadLevels: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}}, want: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}},
-		{name: "4. customLoadLevel_unsorted", args: args{loadLevels: []LoadLevel{{1, 1}, {0.5, 0.5}, {0, 0}}}, want: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}},
-		{name: "5. customLoadLevel_unsorted", args: args{loadLevels: []LoadLevel{{1, 1}, {0.5, 0.5}, {0.1, 0.1}, {0.8, 0.8}, {0, 0}}}, want: []LoadLevel{{0, 0}, {0.1, 0.1}, {0.5, 0.5}, {0.8, 0.8}, {1, 1}}},
+		{name: "1. nilLoadLevels", args: args{loadLevels: nil}, want: &agileController{levels: defaultLoadLevels}},
+		{name: "2. defaultLoadLevels", args: args{loadLevels: defaultLoadLevels}, want: &agileController{levels: defaultLoadLevels}},
+		{name: "3. customLoadLevel_sorted", args: args{loadLevels: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}}, want: &agileController{levels: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}}},
+		{name: "4. customLoadLevel_unsorted", args: args{loadLevels: []LoadLevel{{1, 1}, {0.5, 0.5}, {0, 0}}}, want: &agileController{levels: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1}}}},
+		{name: "5. customLoadLevel_unsorted", args: args{loadLevels: []LoadLevel{{1, 1}, {0.5, 0.5}, {0.1, 0.1}, {0.8, 0.8}, {0, 0}}}, want: &agileController{levels: []LoadLevel{{0, 0}, {0.1, 0.1}, {0.5, 0.5}, {0.8, 0.8}, {1, 1}}}},
+		{name: "6. invalidLoadLevel", args: args{loadLevels: []LoadLevel{{-1, 0}, {0.5, 0.5}, {1, 1}}}, want: nil, wantErr: true},
+		{name: "7. invalidLoadLevel", args: args{loadLevels: []LoadLevel{{0, 0}, {0.5, 0.5}, {1, 1.5}}}, want: nil, wantErr: true},
+		{name: "8. invalidLoadLevel", args: args{loadLevels: []LoadLevel{{0, 0}, {-1, 0.5}, {1, 1.5}}}, want: nil, wantErr: true},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewAgileController(tt.args.loadLevels).(*agileController)
-			if !reflect.DeepEqual(got.levels, tt.want) {
+			got, err := NewAgileController(tt.args.loadLevels)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewAgileController() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewAgileController() = %v, want %v", got, tt.want)
 			}
 		})

@@ -11,14 +11,39 @@ type rigidController struct {
 	maxChangesPerCycle int
 }
 
+// NewRigidController returns a RigidController.
+//
+// RigidController reacts to the work load with slower sensitivity.
+// Whenever workload raises over a load level, the growth factor of that
+// load level will be applied to change the worker pool size.
+// But for each control cycle, the number of worker changes (start new workers or
+// kill old ones) is limited by maxChangesPerCycle.
+//
+// For example:
+//   LoadLevels = []LoadLevel{ {0.1, 0.3}, {0.5, 0.5}, {0.75, 1} }
+//   MinWorker = 1, MaxWorker = 10, maxChangesPerCycle = 1
+//   => - When load percentage (the number of jobs currently in buffer queue / buffer queue length)
+//        belows 10%, the worker pool size shrink to MinWorker (1 worker).
+//      - When load percentage reaches 10%, the worker pool size expand to
+//        30% of MaxWorker (3 workers).
+//        Need 2 cycles to reaches size of 3 workers, as each cycle only starts 1 new worker.
+//      - When load percentage reaches 50%, the worker pool size expand to
+//        50% of MaxWorker (5 workers).
+//        Need 2 cycles to reaches size of 5 workers, as each cycle only starts 1 new worker.
+//      - When load percentage reaches 75%, the worker pool size expand to
+//        MaxWorker (10 workers).
+//        Need 5 cycles to reaches size of 10 workers, as each cycle only starts 1 new worker.
 func NewRigidController(loadLevels LoadLevels, maxChangesPerCycle int) (PoolController, error) {
 	if maxChangesPerCycle < 0 {
-		return nil, RigidCtlrInvalidConfigErr
+		return nil, InvalidMaxChangesPerCycleErr
 	}
-
 	if len(loadLevels) == 0 {
 		loadLevels = defaultLoadLevels
 	}
+	if !isValidLoadLevels(loadLevels) {
+		return nil, InvalidLoadLevelErr
+	}
+
 	sort.Slice(loadLevels, func(i, j int) bool {
 		return loadLevels[i].LoadPct < loadLevels[j].LoadPct
 	})
@@ -29,6 +54,9 @@ func NewRigidController(loadLevels LoadLevels, maxChangesPerCycle int) (PoolCont
 	}, nil
 }
 
+// GetDesiredWorkerNum calculates the desired number of workers the pool
+// should have in order to cope with current workload.
+//
 // E.g.: levels := []LoadLevel{ {0.1, 0.25}, {0.25, 0.5}, {0.5, 0.75}, {0.75, 1} }
 // ==> growthSpace = MaxWorker - MinWorker
 //     If loadPercentage < 0.1   => desiredWorkerNum = MinWorker

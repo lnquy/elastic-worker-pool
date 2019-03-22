@@ -92,8 +92,12 @@ func New(conf Config, controller PoolController, logger Logger) (*ElasticWorkerP
 	if err := validateConfig(&conf); err != nil {
 		return nil, errors.Wrapf(err, "invalid config")
 	}
+	var err error
 	if controller == nil {
-		controller = NewAgileController(nil)
+		controller, err = NewAgileController(nil)
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to init default AgileController")
 	}
 	if logger == nil {
 		logger = &discardLogger{}
@@ -134,7 +138,7 @@ func (ewp *ElasticWorkerPool) Name() string {
 // Start starts the EWP controller and all its workers.
 // Non-blocking, safe to (mistakenly) call multiple times.
 //
-// Start must be called before sending jobs to EWP (via Enqueue()).
+// Start must be called before sending jobs to EWP.
 func (ewp *ElasticWorkerPool) Start() {
 	ewp.startOnce.Do(func() {
 		ewp.log.Infof("ewp [%s]: starting worker pool\n", ewp.name)
@@ -349,8 +353,8 @@ func (ewp *ElasticWorkerPool) controlPoolSize() {
 }
 
 // SetMinWorker allows to update the minimum number of workers in worker pool.
-// If the input number is bigger than current maximum number of workers then no change
-// will be applied.
+// If the input number is greater than current maximum number of workers (MaxWorker config)
+// then no change will be applied.
 func (ewp *ElasticWorkerPool) SetMinWorker(workerNum int32) {
 	max := atomic.LoadInt32(&ewp.stats.MaxWorker)
 	if workerNum == 0 || workerNum > max {
@@ -361,8 +365,8 @@ func (ewp *ElasticWorkerPool) SetMinWorker(workerNum int32) {
 }
 
 // SetMaxWorker allows to update the maximum number of workers in worker pool.
-// If the input number is smaller than current minimum number of workers then no change
-// will be applied.
+// If the input number is smaller than current minimum number of workers (MinWorker config)
+// then no change will be applied.
 func (ewp *ElasticWorkerPool) SetMaxWorker(workerNum int32) {
 	min := atomic.LoadInt32(&ewp.stats.MinWorker)
 	if workerNum == 0 || workerNum < min {
@@ -402,7 +406,7 @@ func validateConfig(ewpConfig *Config) error {
 	if ewpConfig.MaxWorker < ewpConfig.MinWorker {
 		ewpConfig.MaxWorker = ewpConfig.MinWorker
 	}
-	if ewpConfig.BufferLength < 1 {
+	if ewpConfig.BufferLength < 0 {
 		ewpConfig.BufferLength = defaultBufferLength
 	}
 	if ewpConfig.ShutdownTimeout == 0 {
