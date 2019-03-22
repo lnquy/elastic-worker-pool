@@ -59,7 +59,7 @@ func TestElasticWorkerPool(t *testing.T) {
 			}
 		}
 
-		if err := myPool.Enqueue(func() {}, 10*time.Millisecond); err != WorkerTimeoutExceededErr {
+		if err := myPool.Enqueue(func() {}, 10*time.Millisecond); err != ErrWorkerTimeoutExceeded {
 			t.Fatalf("4. Expected enqueue failed due to timeout, got: %v", err)
 		}
 	}()

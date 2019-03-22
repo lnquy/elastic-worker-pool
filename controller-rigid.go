@@ -36,13 +36,13 @@ type rigidController struct {
 //        Need 5 cycles to reaches size of 10 workers, as each cycle only starts 1 new worker.
 func NewRigidController(loadLevels LoadLevels, maxChangesPerCycle int) (PoolController, error) {
 	if maxChangesPerCycle < 0 {
-		return nil, InvalidMaxChangesPerCycleErr
+		return nil, ErrInvalidMaxChangesPerCycle
 	}
 	if len(loadLevels) == 0 {
 		loadLevels = defaultLoadLevels
 	}
 	if !isValidLoadLevels(loadLevels) {
-		return nil, InvalidLoadLevelErr
+		return nil, ErrInvalidLoadLevel
 	}
 
 	sort.Slice(loadLevels, func(i, j int) bool {

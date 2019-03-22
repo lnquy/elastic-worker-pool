@@ -17,10 +17,10 @@ func init() {
 
 func main() {
 	ewpConfig := ewp.Config{
-		MinWorker: 5,
-		MaxWorker: 20,
+		MinWorker:           5,
+		MaxWorker:           20,
 		PoolControlInterval: 10 * time.Second,
-		BufferLength: 1000,
+		BufferLength:        1000,
 	}
 
 	// Create a pool with default PoolController and logging using logrus.Logger.

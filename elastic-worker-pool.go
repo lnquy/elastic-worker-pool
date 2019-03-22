@@ -169,7 +169,7 @@ func (ewp *ElasticWorkerPool) Start() {
 // the timeout duration.
 func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) error {
 	if ewp.isStopped.Get() {
-		return WorkerPoolStoppedErr
+		return ErrWorkerPoolStopped
 	}
 
 	if len(timeout) == 0 {
@@ -190,7 +190,7 @@ func (ewp *ElasticWorkerPool) Enqueue(jobFunc func(), timeout ...time.Duration) 
 		atomic.AddInt64(&ewp.stats.EnqueuedJobs, 1)
 		ewp.log.Debugf("ewp [%s]: job enqueued", ewp.name)
 	case <-time.After(timeout[0]):
-		return WorkerTimeoutExceededErr
+		return ErrWorkerTimeoutExceeded
 	}
 	return nil
 }
@@ -278,7 +278,7 @@ func (ewp *ElasticWorkerPool) Close() (err error) {
 			ewp.log.Infof("ewp [%s]: worker pool shutdown gracefully in %v\n", ewp.name, time.Since(start))
 		case <-time.After(ewp.conf.ShutdownTimeout): // Force shutdown after timeout
 			ewp.log.Infof("ewp [%s]: worker pool exceeded shutdown timeout. Force quit\n", ewp.name)
-			err = ShutdownTimeoutExceededErr
+			err = ErrShutdownTimeoutExceeded
 		}
 	})
 

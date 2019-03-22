@@ -30,7 +30,7 @@ func NewAgileController(loadLevels LoadLevels) (PoolController, error) {
 		loadLevels = defaultLoadLevels
 	}
 	if !isValidLoadLevels(loadLevels) {
-		return nil, InvalidLoadLevelErr
+		return nil, ErrInvalidLoadLevel
 	}
 	sort.Slice(loadLevels, func(i, j int) bool {
 		return loadLevels[i].LoadPct < loadLevels[j].LoadPct
