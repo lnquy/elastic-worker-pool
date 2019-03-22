@@ -3,10 +3,9 @@
   <a href="https://godoc.org/github.com/lnquy/elastic-worker-pool" title="GoDoc Reference" rel="nofollow"><img src="https://img.shields.io/badge/go-documentation-blue.svg?style=flat" alt="GoDoc Reference"></a>
   <a href="https://github.com/github.com/lnquy/elastic-worker-pool/releases/tag/v0.0.1" title="0.0.1 Release" rel="nofollow"><img src="https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat" alt="0.0.1 release"></a>
   <a href="https://goreportcard.com/report/github.com/lnquy/elastic-worker-pool"><img src="https://goreportcard.com/badge/github.com/lnquy/elastic-worker-pool" alt="Code Status" /></a>
+  <a href="https://travis-ci.org/lnquy/elastic-worker-pool"><img src="https://travis-ci.org/lnquy/elastic-worker-pool.svg?branch=master" alt="Build Status" /></a>
+  <a href='https://coveralls.io/github/lnquy/elastic-worker-pool?branch=master'><img src='https://coveralls.io/repos/github/lnquy/elastic-worker-pool/badge.svg?branch=master' alt='Coverage Status' /></a>
   <br />
-  <!--<a href="https://travis-ci.org/github-com/lnquy/elastic-worker-pool"><img src="https://travis-ci.org/github-com/lnquy/elastic-worker-pool.svg" alt="Build Status" /></a>-->
-  <!--<a href='https://coveralls.io/github/fyne-io/fyne?branch=develop'><img src='https://coveralls.io/repos/github/fyne-io/fyne/badge.svg?branch=develop' alt='Coverage Status' /></a>-->
-  <!--<a href='https://sourcegraph.com/github.com/fyne-io/fyne?badge'><img src='https://sourcegraph.com/github.com/fyne-io/fyne/-/badge.svg' alt='Used By' /></a-->
 </p>
 
 When creating worker pool in Go, most of time we only create a pool with fixed number of workers.
