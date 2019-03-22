@@ -1,0 +1,26 @@
+sudo: false
+
+language: go
+
+env:
+  - GO111MODULE=on
+
+go:
+  - "1.11.x"
+  - "1.12.x"
+  -
+go_import_path: github.com/lnquy/elastic-worker-pool
+
+git:
+  depth: 1
+
+before_script:
+  - go mod download
+  - go mod vendor
+  - go get github.com/mattn/goveralls
+
+script:
+  - make vet
+  - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then exit; fi'
+  - go test -race -covermode=atomic -coverprofile=coverage.out ./...
+  - $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
