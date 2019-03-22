@@ -15,14 +15,14 @@ type agileController struct {
 // load level will be applied immediately to change the worker pool size.
 //
 // For example:
-//   LoadLevels = []LoadLevel{ {0.1, 0.3}, {0.5, 0.5}, {0.75, 1} }
-//   MinWorker = 1, MaxWorker = 10
+//   LoadLevels = []LoadLevel{ {0.1, 0.3}, {0.5, 0.6}, {0.75, 1} }
+//   MinWorker = 1, MaxWorker = 10, GrowthSize = (MaxWorker-MinWorker) = 9
 //   => - When load percentage (the number of jobs currently in buffer queue / buffer queue length)
 //        belows 10%, the worker pool size shrink to MinWorker (1 worker).
 //      - When load percentage reaches 10%, the worker pool size expand to
-//        30% of MaxWorker (3 workers).
+//        MinWorker + 30% of GrowthSize (4 workers).
 //      - When load percentage reaches 50%, the worker pool size expand to
-//        50% of MaxWorker (5 workers).
+//        MinWorker + 60% of GrowthSize (7 workers).
 //      - When load percentage reaches 75%, the worker pool size expand to
 //        MaxWorker (10 workers).
 func NewAgileController(loadLevels LoadLevels) (PoolController, error) {

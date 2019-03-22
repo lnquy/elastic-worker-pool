@@ -17,19 +17,20 @@ type rigidController struct {
 // Whenever workload raises over a load level, the growth factor of that
 // load level will be applied to change the worker pool size.
 // But for each control cycle, the number of worker changes (start new workers or
-// kill old ones) is limited by maxChangesPerCycle.
+// kill old ones) is limit by maxChangesPerCycle.
 //
 // For example:
 //   LoadLevels = []LoadLevel{ {0.1, 0.3}, {0.5, 0.5}, {0.75, 1} }
 //   MinWorker = 1, MaxWorker = 10, maxChangesPerCycle = 1
+//   GrowthSize = (MaxWorker-MinWorker) = 9
 //   => - When load percentage (the number of jobs currently in buffer queue / buffer queue length)
 //        belows 10%, the worker pool size shrink to MinWorker (1 worker).
 //      - When load percentage reaches 10%, the worker pool size expand to
-//        30% of MaxWorker (3 workers).
-//        Need 2 cycles to reaches size of 3 workers, as each cycle only starts 1 new worker.
+//        MinWorker + 30% of GrowthSize (4 workers).
+//        Need 3 cycles to reach size of 4 workers, as each cycle only starts 1 new worker.
 //      - When load percentage reaches 50%, the worker pool size expand to
-//        50% of MaxWorker (5 workers).
-//        Need 2 cycles to reaches size of 5 workers, as each cycle only starts 1 new worker.
+//        MinWorker + 50% of GrowthSize (5 workers).
+//        Need 1 cycle to reach size of 5 workers, as each cycle only starts 1 new worker.
 //      - When load percentage reaches 75%, the worker pool size expand to
 //        MaxWorker (10 workers).
 //        Need 5 cycles to reaches size of 10 workers, as each cycle only starts 1 new worker.
