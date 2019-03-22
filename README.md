@@ -1,7 +1,7 @@
 # Elastic Worker Pool
 <p align="left">
   <a href="https://godoc.org/github.com/lnquy/elastic-worker-pool" title="GoDoc Reference" rel="nofollow"><img src="https://img.shields.io/badge/go-documentation-blue.svg?style=flat" alt="GoDoc Reference"></a>
-  <a href="https://github.com/fyne-io/fyne/releases/tag/v0.0.1" title="0.0.1 Release" rel="nofollow"><img src="https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat" alt="0.0.1 release"></a>
+  <a href="https://github.com/github.com/lnquy/elastic-worker-pool/releases/tag/v0.0.1" title="0.0.1 Release" rel="nofollow"><img src="https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat" alt="0.0.1 release"></a>
   <a href="https://goreportcard.com/report/github.com/lnquy/elastic-worker-pool"><img src="https://goreportcard.com/badge/github.com/lnquy/elastic-worker-pool" alt="Code Status" /></a>
   <br />
   <!--<a href="https://travis-ci.org/github-com/lnquy/elastic-worker-pool"><img src="https://travis-ci.org/github-com/lnquy/elastic-worker-pool.svg" alt="Build Status" /></a>-->
@@ -111,7 +111,7 @@ GrowthSize = (MaxWorker-MinWorker) = 9
       => Need 5 cycles to reaches size of 10 workers, as each cycle only starts 1 new worker.
 ```
 
-**Note: You can implement the `PoolController` interface to provide your own custom pool size control mechanism. For example: Control based on CPU or memory usage...**
+**Note: You can implement the [PoolController](https://github.com/lnquy/elastic-worker-pool/blob/master/controller.go) interface to provide your own custom pool size control mechanism. For example: Control based on CPU or memory usage...**
 
 ## License
 
